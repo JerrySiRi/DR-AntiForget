@@ -16,7 +16,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-
+#! deal with multi-turn data
 def chat_mt(model, messages, dataset_name):
     assert len(messages) % 2 == 0
     nturn = len(messages) // 2
@@ -73,7 +73,12 @@ def infer_data_api(model, work_dir, model_name, dataset, index_set=None, api_npr
     os.remove(out_file)
     return res
 
+"""
+在当前 rank 上取一部分样本，构造多轮输入结构（struct），调用 chat_mt(...) 得到模型回复，
+并把结果持续写入临时文件 out_file，最后返回（可能是新构建的）model。
+"""
 
+#! core + general function for inference
 def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, api_nproc=4, use_vllm=False):
     dataset_name = dataset.dataset_name
     res = {}
@@ -81,7 +86,7 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
         res.update(load(out_file))
 
     rank, world_size = get_rank_and_world_size()
-    sheet_indices = list(range(rank, len(dataset), world_size))
+    sheet_indices = list(range(rank, len(dataset), world_size)) #! indicing stretegy 
     lt = len(sheet_indices)
     data = dataset.data.iloc[sheet_indices]
     data_indices = [i for i in data['index']]
@@ -97,7 +102,7 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
         dump(res, out_file)
         return model
 
-    # Data need to be inferred
+    # Filter data which has been inferred. Data need to be inferred
     data = data[~data['index'].isin(res)]
     lt = len(data)
 
@@ -110,9 +115,9 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
         kwargs = {'use_vllm': use_vllm}
 
     # (25.06.05) In newer version of transformers (after 4.50), with device_map='auto' and torchrun launcher,
-    # Transformers automatically adopt TP parallelism, which leads to compatibility problems with VLMEvalKit
+    #! Transformers automatically adopt TP parallelism, which leads to compatibility problems with VLMEvalKit
     # (In VLMEvalKit, we use torchrun to launch multiple model instances on a single node).
-    # To bypass this problem, we unset `WORLD_SIZE` before building the model to not use TP parallel.
+    #! To bypass this problem, we unset `WORLD_SIZE` before building the model to not use TP parallel.
     ws_bak = os.environ.pop('WORLD_SIZE', None)
     model = supported_VLM[model_name](**kwargs) if isinstance(model, str) else model
     if ws_bak:
@@ -128,7 +133,7 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
             model_name=model_name,
             dataset=dataset,
             index_set=set(indices),
-            api_nproc=api_nproc)
+            api_nproc=api_nproc) # Concurrent Request
         for idx in indices:
             assert idx in supp
         res.update(supp)
@@ -138,13 +143,15 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     else:
         model.set_dump_image(dataset.dump_image)
 
+    #! multi-turn conversation
     for i in tqdm(range(lt)):
         idx = data.iloc[i]['index']
         if idx in res:
             continue
-
+        #! structured input for specific model
         if hasattr(model, 'use_custom_prompt') and model.use_custom_prompt(dataset_name):
-            struct = model.build_prompt(data.iloc[i], dataset=dataset_name)
+            struct = model.build_prompt(data.iloc[i], dataset=dataset_name) 
+        #! default structured input for general dataset (might be multi-turn dataset)
         else:
             struct = dataset.build_prompt(data.iloc[i])
 
@@ -154,6 +161,7 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
         if verbose:
             print(response, flush=True)
 
+        #* Incremental saving
         res[idx] = response
         if (i + 1) % 20 == 0:
             dump(res, out_file)
@@ -162,6 +170,14 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     dump(res, out_file)
     return model
 
+
+"""
+multi-turn 数据集推理的“调度器/封装器”：
+它自己不负责“多轮对话如何逐轮喂给模型”，而是负责：
+- 分布式切分/并行推理（每个 rank 推一部分）
+- 把各 rank 的结果汇总成一个最终预测文件
+- 做一点后处理（例如去掉不需要写入的字段）
+"""
 
 # A wrapper for infer_data, do the pre & post processing
 def infer_data_job_mt(

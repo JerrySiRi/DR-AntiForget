@@ -1,29 +1,51 @@
+
+# 3 mode for running: all, eval, infer
+# 2 version for getting parameters; simple mode (command line), configuration file (json)
+
 import json
 import os
 import subprocess
 from functools import partial
 
 
-# GET the number of GPUs on the node without importing libs like torch
+#* Returns a list of visible GPU indices without importing heavyweight libraries (e.g., torch).
+#* Priority:
+#* - If CUDA_VISIBLE_DEVICES is set: respect it.
+#* - Else: attempt to query GPUs via `nvidia-smi`.
+#* - Fallback: return an empty list if not available.
 def get_gpu_list():
     CUDA_VISIBLE_DEVICES = os.environ.get('CUDA_VISIBLE_DEVICES', '')
     if CUDA_VISIBLE_DEVICES != '':
+        #* Example: "0,1,2" -> [0, 1, 2]
         gpu_list = [int(x) for x in CUDA_VISIBLE_DEVICES.split(',')]
         return gpu_list
     try:
+        #* `nvidia-smi --list-gpus | wc -l` -> number of GPUs
         ps = subprocess.Popen(('nvidia-smi', '--list-gpus'), stdout=subprocess.PIPE)
         output = subprocess.check_output(('wc', '-l'), stdin=ps.stdout)
         return list(range(int(output)))
     except:
+        #* No NVIDIA driver / command not found / running on CPU-only environment.
         return []
 
 
+# --- Distributed runtime metadata (single-process defaults). --- #
+#* RANK/WORLD_SIZE are usually set by torchrun/slurm.
+"""
+world size = 分布式作业中有多少进程（2 台机器，每台 8 张 GPU，总共 16 个进程）
+rank = 当前这个进程在全部进程里的 编号（全局唯一 ID）。作用是：
+- 打日志（避免每个进程都打印一遍）
+- 下载/准备数据（避免重复下载）
+- 汇总评测结果、写最终输出
+local = 这台机器上的数据
+"""
 RANK = int(os.environ.get('RANK', 0))
 WORLD_SIZE = int(os.environ.get('WORLD_SIZE', 1))
-LOCAL_WORLD_SIZE = int(os.environ.get("LOCAL_WORLD_SIZE",1))
-LOCAL_RANK = int(os.environ.get("LOCAL_RANK",1))
+LOCAL_WORLD_SIZE = int(os.environ.get("LOCAL_WORLD_SIZE", 1))
+LOCAL_RANK = int(os.environ.get("LOCAL_RANK", 1))
 
 GPU_LIST = get_gpu_list()
+#* If this node runs multiple local processes, slice GPU visibility per process.
 if LOCAL_WORLD_SIZE > 1 and len(GPU_LIST):
     NGPU = len(GPU_LIST)
     assert NGPU >= LOCAL_WORLD_SIZE, "The number of processes should be less than or equal to the number of GPUs"
@@ -31,7 +53,7 @@ if LOCAL_WORLD_SIZE > 1 and len(GPU_LIST):
     DEVICE_START_IDX = GPU_PER_PROC * LOCAL_RANK
     CUDA_VISIBLE_DEVICES = [str(i) for i in GPU_LIST[DEVICE_START_IDX: DEVICE_START_IDX + GPU_PER_PROC]]
     CUDA_VISIBLE_DEVICES = ','.join(CUDA_VISIBLE_DEVICES)
-    # Set CUDA_VISIBLE_DEVICES
+    #* Enforce per-process GPU binding via CUDA_VISIBLE_DEVICES.
     os.environ['CUDA_VISIBLE_DEVICES'] = CUDA_VISIBLE_DEVICES
     print(
         f'RANK: {RANK}, LOCAL_RANK: {LOCAL_RANK}, WORLD_SIZE: {WORLD_SIZE},'
@@ -39,6 +61,11 @@ if LOCAL_WORLD_SIZE > 1 and len(GPU_LIST):
     )
 
 
+#* scieval provides:
+#* - model registry/config shortcuts (`supported_VLM`)
+#* - dataset builders and dataset registries
+#* - inference runners (text/image/video/multi-turn)
+#* - misc utilities (logging, filesystem, time, git hash, etc.) via `scieval.smp`
 from scieval.config import supported_VLM
 from scieval.dataset.video_dataset_config import supported_video_datasets
 from scieval.dataset import build_dataset
@@ -49,12 +76,32 @@ from scieval.smp import *
 from scieval.utils.result_transfer import MMMU_result_transfer, MMTBench_result_transfer
 
 
-# Make WORLD_SIZE invisible when build models
+# --- Build a model object using a config dict entry. --- #
+#* Note: this temporarily hides WORLD_SIZE so model constructors don't think we're in distributed mode.
+"""
+意义：支持多种模型的eval，需要把每个模型处理不同的地方分开处理
+
+原因：因为看到了 WORLD_SIZE 就误以为自己要进入分布式模式。
+很多库/模型封装在初始化时会做类似判断：
+“如果发现 WORLD_SIZE > 1，那我是不是该初始化 torch.distributed？”
+“我是不是该自动切分模型、分配设备、开启并行推理？”
+“我是不是该把一些参数（batch size、device map、进程间通信）按分布式处理？”
+但在这个脚本里，分布式的初始化是 在 main() 里显式做的
+
+fail_fast 遇到不可恢复错误时是否立刻抛异常停止（fail fast），而不是记录失败继续跑后续样本
+
+verbose 是否输出更详细日志（例如请求/响应状态、进度、异常栈等）。
+
+ignore_patterns 把某些错误信息关键字“视为可忽略”，从而将某些失败输出当作有效输出（常见于 API 返回里包含一些可接受的错误样式时）。
+
+stream API 调用是否使用 streaming（流式输出）。
+
+"""
 def build_model_from_config(cfg, model_name, use_vllm=False, args=None):
     import scieval.api
     import scieval.vlm
+    #* Some model code may read WORLD_SIZE; remove it during construction to avoid side effects.
     ws_bak = os.environ.pop('WORLD_SIZE', None)
-
     config = cp.deepcopy(cfg[model_name])
     if args is not None:
         if 'retry' not in config:
@@ -90,28 +137,43 @@ def build_model_from_config(cfg, model_name, use_vllm=False, args=None):
     return model
 
 
+#* Build a dataset instance from a config dict entry.
+#! This enables more control than `build_dataset(name)` (e.g., video fps/nframe, subtitles, etc.).
 def build_dataset_from_config(cfg, dataset_name):
     import scieval.dataset
     import inspect
     config = cp.deepcopy(cfg[dataset_name])
+
+    #* Shortcut: empty config means "use default video dataset settings".
     if config == {}:
         return supported_video_datasets[dataset_name]()
+
+    #* Otherwise, config must specify the dataset class name.
     assert 'class' in config
     cls_name = config.pop('class')
     if hasattr(scieval.dataset, cls_name):
         cls = getattr(scieval.dataset, cls_name)
+
+        #* Filter config keys to only those accepted by the dataset class __init__.
         sig = inspect.signature(cls.__init__)
         valid_params = {k: v for k, v in config.items() if k in sig.parameters}
+
+        #* Basic validation for video datasets.
         if cls.MODALITY == 'VIDEO':
             if valid_params.get('fps', 0) > 0 and valid_params.get('nframe', 0) > 0:
                 raise ValueError('fps and nframe should not be set at the same time')
             if valid_params.get('fps', 0) <= 0 and valid_params.get('nframe', 0) <= 0:
                 raise ValueError('fps and nframe should be set at least one valid value')
+
         return cls(**valid_params)
     else:
         raise ValueError(f'Class {cls_name} is not supported in `scieval.dataset`')
 
 
+#* CLI argument parsing.
+#* Two modes:
+#* - "simple mode": pass `--data` and `--model` lists directly.
+#* - "config mode": pass a JSON file via `--config` to define model/data sections.
 def parse_args():
     help_msg = """\
 You can launch the evaluation by setting either --data and --model or --config.
@@ -222,9 +284,23 @@ You can launch the evaluation by setting either --data and --model or --config.
     return args
 
 
+#! Main entry point for end-to-end evaluation.
+#* High-level pipeline:
+#* 1) Parse args (either --data/--model lists OR a JSON --config).
+#* 2) (Optional) Initialize distributed.
+#* 3) For each model x dataset:
+#*    - Build model/dataset
+#*    - Run inference (unless mode == eval)
+#*    - Run evaluation (unless mode == infer)
+#*    - Write outputs under work_dir/model_name/eval_id
+
 def main():
     logger = get_logger('RUN')
     args = parse_args()
+
+    #*`use_config=True` means args.model/args.data are derived from the JSON config.
+    # -- version 1: simple mode, getting parameter from command line
+    # -- version 2: config mode, getting parameter from JSON file
     use_config, cfg = False, None
     if args.config is not None:
         assert args.data is None and args.model is None, '--data and --model should not be set when using --config'
@@ -232,17 +308,24 @@ def main():
         args.model = list(cfg['model'].keys())
         args.data = list(cfg['data'].keys())
     else:
+        #* In "simple mode", you must pass at least one dataset name via --data.
         assert len(args.data), '--data should be a list of data files'
 
+    #* Resume behavior hint in logs.
+    #! default setting
+    #! In order to avoid interleaved and redundant information, only the process with rank id=0 has the access to print logs.
     if RANK == 0:
         if not args.reuse:
             logger.warning('--reuse is not set, will not reuse previous (before one day) temporary files')
         else:
             logger.warning('--reuse is set, will reuse the latest prediction & temporary pickle files')
 
+    #* Allow overriding output root via environment variable.
+    #! set MMEVAL_ROOT to amend output directory from root to MMEVAL_ROOT
     if 'MMEVAL_ROOT' in os.environ:
         args.work_dir = os.environ['MMEVAL_ROOT']
 
+    #* support VLM in simple mode
     if not use_config:
         for k, v in supported_VLM.items():
             if hasattr(v, 'keywords') and 'retry' in v.keywords and args.retry is not None:
@@ -267,10 +350,11 @@ def main():
                     kws = supported_VLM[m].keywords
                     supported_VLM[m] = partial(GPT4V, **kws)
                     logger.warning(f'FWD_API is set, will use class `GPT4V` for {m}')
-
+    
+    #! Communication in Distributed Computing 
     if WORLD_SIZE > 1:
         import torch.distributed as dist
-        dist.init_process_group(
+        dist.init_process_group( # for sync
             backend='nccl',
             timeout=datetime.timedelta(seconds=int(os.environ.get('DIST_TIMEOUT', 3600)))
         )
@@ -292,8 +376,10 @@ def main():
             os.makedirs(pred_root, exist_ok=True)
 
         if use_config:
-            model = build_model_from_config(cfg['model'], model_name, args.use_vllm,args=args)
+            model = build_model_from_config(cfg['model'], model_name, args.use_vllm, args=args)
 
+        logger.info("INFO - Model Ready")
+        
         for _, dataset_name in enumerate(args.data):
             if WORLD_SIZE > 1:
                 dist.barrier()
@@ -326,8 +412,10 @@ def main():
                     if dataset is None:
                         logger.error(f'Dataset {dataset_name} is not valid, will be skipped. ')
                         continue
-
-                # Handling Multi-Turn Dataset
+                
+                logger.info("INFO - Dataset Ready")
+                
+                #* Handling Multi-Turn Dataset -- same model & dataset for several times
                 result_file = osp.join(pred_root, result_file_base)
                 # Reuse the previous prediction file if exists
                 if RANK == 0 and len(prev_pred_roots):
@@ -342,7 +430,7 @@ def main():
                 if model is None:
                     model = model_name  # which is only a name
 
-                if args.mode != "eval":
+                if args.mode != "eval": # need inference
                     # Perform the Inference
                     if dataset.MODALITY == 'VIDEO':
                         model = infer_data_job_video(
@@ -354,7 +442,7 @@ def main():
                             verbose=args.verbose,
                             api_nproc=args.api_nproc,
                             use_vllm=args.use_vllm)
-                    elif dataset.TYPE == 'MT':
+                    elif dataset.TYPE == 'MT': # multi-turn messages (role/content)
                         model = infer_data_job_mt(
                             model,
                             work_dir=pred_root,
@@ -364,7 +452,7 @@ def main():
                             api_nproc=args.api_nproc,
                             ignore_failed=args.ignore,
                             use_vllm=args.use_vllm)
-                    else:
+                    else: # orginal task: Q&A, VQA, instruction, etc.
                         model = infer_data_job(
                             model,
                             work_dir=pred_root,
@@ -375,9 +463,10 @@ def main():
                             ignore_failed=args.ignore,
                             use_vllm=args.use_vllm,
                         )
+                    logger.info("INFO - Inference finished")
 
                 # Set the judge kwargs first before evaluation or dumping
-
+                 #! Configuration below is only used when LLM-as-judge
                 judge_kwargs = {
                     'nproc': args.api_nproc,
                     'verbose': args.verbose,
@@ -397,6 +486,8 @@ def main():
                     judge_kwargs['model'] = args.judge
                 else:
                     print(dataset_name)
+                    #! Not all dataset need LLM-as-judge, para "model" just for preparation
+                    #! e.g. dataset with rule-based with ground truth (could use exact matching) does not need LLM-as-judge
                     if dataset.TYPE in ['MCQ', 'Y/N', 'MCQ_MMMU_Pro'] or listinstr(
                         ['moviechat1k', 'mme-reasoning'], dataset_name.lower()
                     ):
@@ -438,8 +529,10 @@ def main():
                     elif listinstr(['MaScQA'], dataset_name):
                         judge_kwargs['model'] = 'o3'
 
+                #! double evaluation
                 if args.use_verifier:
                     judge_kwargs['use_verifier'] = True
+                #! local model + support vllm
                 if args.use_vllm:
                     judge_kwargs['use_vllm'] = True
 
@@ -448,10 +541,12 @@ def main():
 
                 if WORLD_SIZE > 1:
                     dist.barrier()
+                    
 
-                # Only RANK 0 handles the evaluation part
+                #! Only RANK 0 handles the evaluation part
                 if RANK == 0:
-                    # Prepare Submission Files for MMMU_TEST AND MMT-Bench_ALL
+                    #* Prepare Submission Files for MMMU_TEST AND MMT-Bench_ALL
+                    #* Handling Special dataset -> Convert format and submit to official evaluation
                     if dataset_name in ['MMMU_TEST']:
                         result_json = MMMU_result_transfer(result_file)
                         logger.info(f'Transfer MMMU_TEST result to json for official evaluation, '
@@ -487,13 +582,15 @@ def main():
                         logger.error(
                             f'Can not evaluate {dataset_name} on non-official servers, will skip the evaluation.')
                         continue
-
-                    # Setup the proxy for the evaluation
+                    # Setup the proxy for the evaluation (LLM-as-judge)
                     eval_proxy = os.environ.get('EVAL_PROXY', None)
                     old_proxy = os.environ.get('HTTP_PROXY', '')
                     if eval_proxy :
                         proxy_set(eval_proxy)
 
+
+                    #* Convert evaluation api to normal when evaluating
+                    #* support backup
                     env_backup = {}
                     new_keys_added = []
                     for key, value in list(os.environ.items()):
@@ -508,13 +605,16 @@ def main():
                             os.environ[target_key] = value
                             logger.info(f"[Eval Env] Overriding {target_key} using {key}")
                     try:
-                        # Perform the Evaluation
+                        #! Perform the Evaluation
+                        #! Each dataset has unique evaluation function
                         eval_results = dataset.evaluate(result_file, **judge_kwargs)
                         # Display Evaluation Results in Terminal
                         if eval_results is not None:
                             assert isinstance(eval_results, dict) or isinstance(eval_results, pd.DataFrame)
                             logger.info(f'The evaluation of model {model_name} x dataset {dataset_name} has finished! ')
                             logger.info('Evaluation Results:')
+                            
+                            #* Two format to display evaluation results
                             if isinstance(eval_results, dict):
                                 logger.info('\n' + json.dumps(eval_results, indent=4))
                             elif isinstance(eval_results, pd.DataFrame):
@@ -524,6 +624,7 @@ def main():
                     except Exception as e:
                         raise(e)
 
+                    #! Need backup env to avoid influencing following model & dataset
                     finally:
                         for key, value in env_backup.items():
                             os.environ[key] = value
@@ -532,9 +633,12 @@ def main():
                                 del os.environ[key]
                         if eval_proxy is not None:
                             proxy_set(old_proxy)
+                        
+                        logger.info("INFO - Evaluation finished")
 
 
-                    # Create the symbolic links for the prediction files
+                    #* Create the symbolic links for the prediction files
+                    #* TODO: put files into pred_root directory by using symbolic links
                     files = os.listdir(pred_root)
                     files = [x for x in files if (f'{model_name}_{dataset_name}' in x or "status.json" in x)]
                     for f in files:
