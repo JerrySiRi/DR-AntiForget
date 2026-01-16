@@ -280,6 +280,7 @@ You can launch the evaluation by setting either --data and --model or --config.
                         default=None,
                         help='Keywords in error messages to ignore and treat as valid output')
     parser.add_argument('--stream', action='store_true', help='Use streaming mode for API calls. Default is False.')
+    parser.add_argument('--use-vllm', type=bool, default=True, help='Using vLLM to support LLMs, and performing inference with vLLM.')
     args = parser.parse_args()
     return args
 

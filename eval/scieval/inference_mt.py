@@ -114,6 +114,11 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     ):
         kwargs = {'use_vllm': use_vllm}
 
+    #* Pass `use_vllm` through to model constructors when requested.
+    #* Model implementations can choose to honor or ignore this flag.
+    if use_vllm:
+        kwargs = {'use_vllm': True}
+        
     # (25.06.05) In newer version of transformers (after 4.50), with device_map='auto' and torchrun launcher,
     #! Transformers automatically adopt TP parallelism, which leads to compatibility problems with VLMEvalKit
     # (In VLMEvalKit, we use torchrun to launch multiple model instances on a single node).
