@@ -431,7 +431,7 @@ def main():
                     model = model_name  # which is only a name
 
                 if args.mode != "eval": # need inference
-                    # Perform the Inference
+                    #! Perform the Inference
                     if dataset.MODALITY == 'VIDEO':
                         model = infer_data_job_video(
                             model,

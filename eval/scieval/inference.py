@@ -17,7 +17,7 @@ def parse_args():
     return args
 
 
-# Only API model is accepted
+#! Only API model is accepted
 def infer_data_api(model, work_dir, model_name, dataset, index_set=None, api_nproc=4, ignore_failed=False, **kwargs):
     rank, world_size = get_rank_and_world_size()
     assert rank == 0 and world_size == 1
@@ -79,35 +79,40 @@ def infer_data_api(model, work_dir, model_name, dataset, index_set=None, api_npr
     os.remove(out_file)
     return res
 
-
+#! Both API and local model
 def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, api_nproc=4, use_vllm=False, **kwargs):
+    #* Load history result. 
+    #* Combine *_PREV.pkl and current out_file into res
     dataset_name = dataset.dataset_name
     prev_file = f'{work_dir}/{model_name}_{dataset_name}_PREV.pkl'
     res = load(prev_file) if osp.exists(prev_file) else {}
     if osp.exists(out_file):
         res.update(load(out_file))
-
+    
+    #* Divide cases by rank and world_size
     rank, world_size = get_rank_and_world_size()
     sheet_indices = list(range(rank, len(dataset), world_size))
     lt = len(sheet_indices)
     data = dataset.data.iloc[sheet_indices]
     data_indices = [i for i in data['index']]
 
-    # If finished, will exit without building the model
+    #* If finished, will exit without building the model
     all_finished = True
     for i in range(lt):
         idx = data.iloc[i]['index']
         if idx not in res:
             all_finished = False
     if all_finished:
+        #* Situation: All data that current rank process should infer has been in res. -> dump and return
         res = {k: res[k] for k in data_indices}
         dump(res, out_file)
         return model
 
-    # Data need to be inferred
+    #* Data need to be inferred
     data = data[~data['index'].isin(res)]
     lt = len(data)
 
+    #! Only these models need vllm (VLM)
     if model_name is not None and (
         'Llama-4' in model_name
         or 'Qwen2-VL' in model_name
@@ -124,7 +129,9 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     if ws_bak:
         os.environ['WORLD_SIZE'] = ws_bak
 
+    #! Perform Inference
     is_api = getattr(model, 'is_api', False)
+    #! Situation 1: API - inference and return
     if is_api:
         lt, indices = len(data), list(data['index'])
         supp = infer_data_api(
@@ -143,8 +150,10 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
         dump(res, out_file)
         return model
     else:
+        #* Callback funcion. Let model serialize the image 
         model.set_dump_image(dataset.dump_image)
-
+    
+    #! Situation 2: model inference
     for i in tqdm(range(lt), desc=f'Infer {model_name}/{dataset_name}, Rank {rank}/{world_size}'):
         idx = data.iloc[i]['index']
         if idx in res:

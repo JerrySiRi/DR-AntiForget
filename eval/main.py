@@ -1,5 +1,5 @@
 def main():
-    print("Hello from multi-lora!")
+    print("Hello from eval!")
 
 
 if __name__ == "__main__":
