@@ -10,15 +10,16 @@ class Qwen3LLM(BaseModel):
 
     def __init__(
         self,
-        model_path: str = "Qwen/Qwen3-8B",
+        model_path: str = "", # need designate in config.py
+        #! your local path, or huggingface name
         use_vllm: bool = True,
         max_model_len: int = 8192,
         max_num_seqs: int = 8,
         gpu_memory_utilization: float = 0.90,
-        temperature: float = 0.7,
+        temperature: float = 0,
         top_p: float = 0.8,
         top_k: int = 20,
-        max_new_tokens: int = 1024,
+        max_tokens: int = 1024,
         stop: list[str] | None = None,
         trust_remote_code: bool = True,
         dtype: str = "auto",
@@ -34,7 +35,7 @@ class Qwen3LLM(BaseModel):
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,
-            "max_tokens": max_new_tokens,
+            "max_tokens": max_tokens,
         }
         if stop:
             self.generation_defaults["stop"] = stop
@@ -47,15 +48,16 @@ class Qwen3LLM(BaseModel):
             if tp_size is None:
                 tp_size = max(1, gpu_count)
 
-            self.llm = LLM(
-                model=model_path,
-                tensor_parallel_size=tp_size,
-                max_model_len=max_model_len,
-                max_num_seqs=max_num_seqs,
-                gpu_memory_utilization=gpu_memory_utilization,
-                trust_remote_code=trust_remote_code,
-                dtype=dtype,
-            )
+            llm_kwargs = {
+                "model": model_path,
+                "tensor_parallel_size": tp_size,
+                "max_num_seqs": max_num_seqs,
+                "gpu_memory_utilization": gpu_memory_utilization,
+                "dtype": dtype,
+                # "max_model_len": max_model_len,
+            }
+            self.llm = LLM(**llm_kwargs)
+    
             self._backend = "vllm"
         else:
             from transformers import AutoModelForCausalLM, AutoTokenizer

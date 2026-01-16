@@ -82,6 +82,23 @@ ungrouped = {
     "Falcon2-VLM-11B": partial(Falcon2VLM, model_path="tiiuae/falcon-11B-vlm"),
 }
 
+#! Add Language Model Configuration
+qwen3llm_series = {
+    "Qwen3-8B": partial[Qwen3LLM](
+        Qwen3LLM,
+        model_path="/data/home/scyb546/models/Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218",
+        temperature=0,
+        max_token=1024,
+    ),
+    "Qwen3-4B-Instruct": partial[Qwen3LLM]( 
+        Qwen3LLM,
+        model_path="/data/home/scyb546/models/Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218",
+        temperature=0,
+        max_token=1024,
+    )
+}
+
+
 o1_key = os.environ.get('O1_API_KEY', None)
 o1_base = os.environ.get('O1_API_BASE', None)
 o1_apis = {
@@ -1313,6 +1330,7 @@ hawkvl_series = {
     )
 }
 
+
 qwen2vl_series = {
     "Qwen-VL-Max-20250813": partial(
         Qwen2VLAPI,
@@ -1748,15 +1766,17 @@ internvl_series = {}
 for group in internvl_groups:
     internvl_series.update(group)
 
-supported_VLM = {}
+supported_LM = {}
+
 
 model_groups = [
+    qwen3llm_series,
     ungrouped, o1_apis, api_models, xtuner_series, qwen_series, llava_series, granite_vision_series,
     internvl_series, yivl_series, xcomposer_series, minigpt4_series, 
     idefics_series, instructblip_series, deepseekvl_series, deepseekvl2_series, 
     janus_series, minicpm_series, cogvlm_series, wemm_series, cambrian_series, 
     chameleon_series, video_models, ovis_series, vila_series, mantis_series,
-    mmalaya_series, phi3_series, phi4_series, xgen_mm_series, qwen2vl_series, qwen3llm_series, qwen3vl_series,
+    mmalaya_series, phi3_series, phi4_series, xgen_mm_series, qwen2vl_series, qwen3vl_series,
     slime_series, eagle_series, moondream_series, llama_series, molmo_series,
     kosmos_series, points_series, nvlm_series, vintern_series, h2ovl_series,
     aria_series, smolvlm_series, sail_series, valley_series, vita_series,
@@ -1766,4 +1786,4 @@ model_groups = [
 ]
 
 for grp in model_groups:
-    supported_VLM.update(grp)
+    supported_LM.update(grp)

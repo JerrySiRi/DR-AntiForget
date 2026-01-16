@@ -66,7 +66,7 @@ if LOCAL_WORLD_SIZE > 1 and len(GPU_LIST):
 #* - dataset builders and dataset registries
 #* - inference runners (text/image/video/multi-turn)
 #* - misc utilities (logging, filesystem, time, git hash, etc.) via `scieval.smp`
-from scieval.config import supported_VLM
+from scieval.config import supported_LM
 from scieval.dataset.video_dataset_config import supported_video_datasets
 from scieval.dataset import build_dataset
 from scieval.inference import infer_data_job
@@ -123,7 +123,7 @@ def build_model_from_config(cfg, model_name, use_vllm=False, args=None):
     if use_vllm:
         config['use_vllm'] = use_vllm
     if 'class' not in config:
-        return supported_VLM[model_name](**config)
+        return supported_LM[model_name](**config)
     cls_name = config.pop('class')
     if hasattr(scieval.api, cls_name):
         model = getattr(scieval.api, cls_name)(**config)
@@ -273,6 +273,9 @@ You can launch the evaluation by setting either --data and --model or --config.
     parser.add_argument('--reuse-aux', type=int, default=True, help='reuse auxiliary evaluation files')
     parser.add_argument(
         '--use-vllm', action='store_true', help='use vllm to generate, the flag is only supported in Llama4 for now')
+    parser.add_argument(
+        '--no-use-vllm', dest='use_vllm', action='store_false', help='disable vllm for generation')
+    parser.set_defaults(use_vllm=True)
     parser.add_argument('--use-verifier', action='store_true', help='use verifier to evaluate')
     parser.add_argument('--fail-fast', action='store_true', help='If set, the program will raise an exception and stop upon an unrecoverable API error '
              'after all retries are exhausted. If not set, it will record a failure message and continue. Specifically in generate_inner method in gpt.py, it should be fixed in future versions')
@@ -280,7 +283,6 @@ You can launch the evaluation by setting either --data and --model or --config.
                         default=None,
                         help='Keywords in error messages to ignore and treat as valid output')
     parser.add_argument('--stream', action='store_true', help='Use streaming mode for API calls. Default is False.')
-    parser.add_argument('--use-vllm', type=bool, default=True, help='Using vLLM to support LLMs, and performing inference with vLLM.')
     args = parser.parse_args()
     return args
 
@@ -328,13 +330,13 @@ def main():
 
     #* support VLM in simple mode
     if not use_config:
-        for k, v in supported_VLM.items():
+        for k, v in supported_LM.items():
             if hasattr(v, 'keywords') and 'retry' in v.keywords and args.retry is not None:
                 v.keywords['retry'] = args.retry
-                supported_VLM[k] = v
+                supported_LM[k] = v
             if hasattr(v, 'keywords') and 'verbose' in v.keywords and args.verbose is not None:
                 v.keywords['verbose'] = args.verbose
-                supported_VLM[k] = v
+                supported_LM[k] = v
             if args.fail_fast:
                 v.keywords['fail_fast'] = True
             if args.ignore_patterns:
@@ -348,8 +350,8 @@ def main():
             from scieval.api import GPT4V
             for m in args.model:
                 if m in supported_APIs:
-                    kws = supported_VLM[m].keywords
-                    supported_VLM[m] = partial(GPT4V, **kws)
+                    kws = supported_LM[m].keywords
+                    supported_LM[m] = partial(GPT4V, **kws)
                     logger.warning(f'FWD_API is set, will use class `GPT4V` for {m}')
     
     #! Communication in Distributed Computing 
@@ -379,7 +381,6 @@ def main():
         if use_config:
             model = build_model_from_config(cfg['model'], model_name, args.use_vllm, args=args)
 
-        logger.info("INFO - Model Ready")
         
         for _, dataset_name in enumerate(args.data):
             if WORLD_SIZE > 1:
@@ -465,6 +466,7 @@ def main():
                             use_vllm=args.use_vllm,
                         )
                     logger.info("INFO - Inference finished")
+                    
 
                 # Set the judge kwargs first before evaluation or dumping
                  #! Configuration below is only used when LLM-as-judge

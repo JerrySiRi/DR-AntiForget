@@ -1,6 +1,6 @@
 import torch
 import torch.distributed as dist
-from scieval.config import supported_VLM
+from scieval.config import supported_LM
 from scieval.utils import track_progress_rich
 from scieval.smp import *
 
@@ -45,7 +45,7 @@ def infer_data_api(model, work_dir, model_name, dataset, index_set=None, api_npr
     if index_set is not None:
         data = data[data['index'].isin(index_set)]
 
-    model = supported_VLM[model_name]() if isinstance(model, str) else model
+    model = supported_LM[model_name]() if isinstance(model, str) else model
     assert getattr(model, 'is_api', False)
     assert hasattr(model, 'chat_inner')
 
@@ -124,7 +124,7 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     # (In VLMEvalKit, we use torchrun to launch multiple model instances on a single node).
     #! To bypass this problem, we unset `WORLD_SIZE` before building the model to not use TP parallel.
     ws_bak = os.environ.pop('WORLD_SIZE', None)
-    model = supported_VLM[model_name](**kwargs) if isinstance(model, str) else model
+    model = supported_LM[model_name](**kwargs) if isinstance(model, str) else model
     if ws_bak:
         os.environ['WORLD_SIZE'] = ws_bak
     assert hasattr(model, 'chat_inner')
