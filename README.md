@@ -13,7 +13,7 @@
 - M: Qwen3-8B, Qwen3-4B-Instruct
 
 注意：
-每个benchmark的max_new_token可能是不一样的，需要跑一跑估计这个benchmark的max_new_token再做判断
+每个benchmark的max_new_token可能是不一样的，需要跑一跑估计这个benchmark的max_new_token再做判断。目前config.py中deafult为2**14
 
 
 
