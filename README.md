@@ -12,7 +12,8 @@
 - B: Chembench
 - M: Qwen3-8B, Qwen3-4B-Instruct
 
-## 1.1 新benchmark配置
+注意：
+每个benchmark的max_new_token可能是不一样的，需要跑一跑估计这个benchmark的max_new_token再做判断
 
 
 

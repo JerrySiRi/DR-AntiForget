@@ -1,6 +1,6 @@
 import torch
 import torch.distributed as dist
-from scieval.config import supported_LM
+from scieval.config import supported_VLM, supported_LLM
 from scieval.utils import track_progress_rich
 from scieval.smp import *
 
@@ -26,7 +26,13 @@ def infer_data_api(model, work_dir, model_name, dataset, index_set=None, api_npr
     if index_set is not None:
         data = data[data['index'].isin(index_set)]
 
-    model = supported_LM[model_name]() if isinstance(model, str) else model
+    if model_name in supported_VLM:
+        model = supported_VLM[model_name]()
+    elif model_name in supported_LLM:
+        model = supported_LLM[model_name]()
+    else:
+        raise ValueError(f"Model {model_name} not found")
+    
     assert getattr(model, 'is_api', False)
     if hasattr(model, 'set_dump_image'):
         model.set_dump_image(dataset.dump_image)
@@ -131,7 +137,12 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     # To bypass this problem, we unset `WORLD_SIZE` before building the model to not use TP parallel.
     ws_bak = os.environ.pop('WORLD_SIZE', None)
     
-    model = supported_LM[model_name](**kwargs) if isinstance(model, str) else model
+    if model_name in supported_VLM:
+        model = supported_VLM[model_name](**kwargs)
+    elif model_name in supported_LLM:
+        model = supported_LLM[model_name](**kwargs)
+    else:
+        raise ValueError(f"Model {model_name} not found")
     
     if ws_bak:
         os.environ['WORLD_SIZE'] = ws_bak

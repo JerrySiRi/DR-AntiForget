@@ -82,22 +82,6 @@ ungrouped = {
     "Falcon2-VLM-11B": partial(Falcon2VLM, model_path="tiiuae/falcon-11B-vlm"),
 }
 
-#! Add Language Model Configuration
-qwen3llm_series = {
-    "Qwen3-8B": partial[Qwen3LLM](
-        Qwen3LLM,
-        model_path="/data/home/scyb546/models/Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218",
-        temperature=0,
-        max_token=256,
-    ),
-    "Qwen3-4B-Instruct": partial[Qwen3LLM]( 
-        Qwen3LLM,
-        model_path="/data/home/scyb546/models/Qwen3-4B_Instruct",
-        temperature=0,
-        max_token=256,
-    )
-}
-
 
 o1_key = os.environ.get('O1_API_KEY', None)
 o1_base = os.environ.get('O1_API_BASE', None)
@@ -1766,11 +1750,10 @@ internvl_series = {}
 for group in internvl_groups:
     internvl_series.update(group)
 
-supported_LM = {}
+supported_VLM = {}
 
 
 model_groups = [
-    qwen3llm_series,
     ungrouped, o1_apis, api_models, xtuner_series, qwen_series, llava_series, granite_vision_series,
     internvl_series, yivl_series, xcomposer_series, minigpt4_series, 
     idefics_series, instructblip_series, deepseekvl_series, deepseekvl2_series, 
@@ -1786,4 +1769,37 @@ model_groups = [
 ]
 
 for grp in model_groups:
-    supported_LM.update(grp)
+    supported_VLM.update(grp)
+
+
+#! Add Language Model Configuration
+qwen3llm_series = {
+    "Qwen3-8B": partial[Qwen3LLM](
+        Qwen3LLM,
+        model_path="/data/home/scyb546/models/Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218",
+        temperature=0,
+        max_tokens=2**14,
+    ),
+    "DR-Tulu-8B": partial[Qwen3LLM]( 
+        Qwen3LLM,
+        model_path="/data/home/scyb546/models/DR-Tulu-8B/snapshots/ab49434b30c448760f7ea9dd16aa4dbef38b97d7",
+        temperature=0,
+        max_tokens=2**14,
+    ),
+    "Qwen3-4B-Instruct": partial[Qwen3LLM]( 
+        Qwen3LLM,
+        model_path="/data/home/scyb546/models/Qwen3-4B_Instruct",
+        temperature=0,
+        max_tokens=2**14,
+    )
+}
+
+supported_LLM = {}
+
+
+model_groups = [
+    qwen3llm_series,
+]
+
+for grp in model_groups:
+    supported_LLM.update(grp)

@@ -66,7 +66,7 @@ if LOCAL_WORLD_SIZE > 1 and len(GPU_LIST):
 #* - dataset builders and dataset registries
 #* - inference runners (text/image/video/multi-turn)
 #* - misc utilities (logging, filesystem, time, git hash, etc.) via `scieval.smp`
-from scieval.config import supported_LM
+from scieval.config import supported_VLM, supported_LLM
 from scieval.dataset.video_dataset_config import supported_video_datasets
 from scieval.dataset import build_dataset
 from scieval.inference import infer_data_job
@@ -123,7 +123,12 @@ def build_model_from_config(cfg, model_name, use_vllm=False, args=None):
     if use_vllm:
         config['use_vllm'] = use_vllm
     if 'class' not in config:
-        return supported_LM[model_name](**config)
+        if model_name in supported_VLM:
+            return supported_VLM[model_name](**config)
+        elif model_name in supported_LLM:
+            return supported_LLM[model_name](**config)
+        else:
+            raise ValueError(f"Model {model_name} not found")
     cls_name = config.pop('class')
     if hasattr(scieval.api, cls_name):
         model = getattr(scieval.api, cls_name)(**config)
@@ -330,13 +335,13 @@ def main():
 
     #* support VLM in simple mode
     if not use_config:
-        for k, v in supported_LM.items():
+        for k, v in supported_VLM.items():
             if hasattr(v, 'keywords') and 'retry' in v.keywords and args.retry is not None:
                 v.keywords['retry'] = args.retry
-                supported_LM[k] = v
+                supported_VLM[k] = v
             if hasattr(v, 'keywords') and 'verbose' in v.keywords and args.verbose is not None:
                 v.keywords['verbose'] = args.verbose
-                supported_LM[k] = v
+                supported_VLM[k] = v
             if args.fail_fast:
                 v.keywords['fail_fast'] = True
             if args.ignore_patterns:
@@ -350,8 +355,8 @@ def main():
             from scieval.api import GPT4V
             for m in args.model:
                 if m in supported_APIs:
-                    kws = supported_LM[m].keywords
-                    supported_LM[m] = partial(GPT4V, **kws)
+                    kws = supported_VLM[m].keywords
+                    supported_VLM[m] = partial(GPT4V, **kws)
                     logger.warning(f'FWD_API is set, will use class `GPT4V` for {m}')
     
     #! Communication in Distributed Computing 
@@ -489,6 +494,7 @@ def main():
                     judge_kwargs['model'] = args.judge
                 else:
                     print(dataset_name)
+                    
                     #! Not all dataset need LLM-as-judge, para "model" just for preparation
                     #! e.g. dataset with rule-based with ground truth (could use exact matching) does not need LLM-as-judge
                     if dataset.TYPE in ['MCQ', 'Y/N', 'MCQ_MMMU_Pro'] or listinstr(
@@ -590,7 +596,6 @@ def main():
                     old_proxy = os.environ.get('HTTP_PROXY', '')
                     if eval_proxy :
                         proxy_set(eval_proxy)
-
 
                     #* Convert evaluation api to normal when evaluating
                     #* support backup

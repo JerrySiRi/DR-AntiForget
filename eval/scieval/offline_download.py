@@ -47,26 +47,22 @@ def main():
         help="Local dataset root directory",
     )
     parser.add_argument(
-        "--dataset",
-        type=str,
-        default="ChemBench",
-        help="Dataset name shortcut. Currently supports: ChemBench",
-    )
-    parser.add_argument(
         "--revision",
         type=str,
         default=None,
         help="Optional HF revision/commit hash",
     )
+    parser.add_argument(
+        "--repo_id",
+        type=str,
+        default=None,
+        help="HF repo ID",
+    )
     args = parser.parse_args()
 
-    if args.dataset.lower() in {"chembench"}:
-        repo_id = "jablonkagroup/ChemBench"
-    else:
-        raise ValueError(f"Unsupported dataset shortcut: {args.dataset}")
-
-    local_dir = _download_hf_dataset(repo_id, args.root, revision=args.revision)
-    print(f"Downloaded {repo_id} to: {local_dir}")
+    assert args.repo_id is not None, "HF repo ID is required"
+    local_dir = _download_hf_dataset(args.repo_id, args.root, revision=args.revision)
+    print(f"Downloaded {args.repo_id} to: {local_dir}")
 
 
 if __name__ == "__main__":

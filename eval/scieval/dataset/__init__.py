@@ -91,6 +91,8 @@ from .Researchbench.rank import ResearchbenchRank
 from .Researchbench.retrieve import  ResearchbenchRetrieve
 from .trqa import TRQA
 from .ChemBench.chembench import ChemBench
+from .AIME24.aime24 import AIME24
+from .AIME25.aime25 import AIME25
 from .climaqa import Clima_QA
 from .PHYSICS.PHYSICS import PHYSICS
 from .CMPhysBench.cmphysbench import CMPhysBench
@@ -262,6 +264,7 @@ VIDEO_DATASET = [
 
 TEXT_DATASET = [
     TextMCQDataset,ResearchbenchGenerate,ResearchbenchRank,ResearchbenchRetrieve, PHYSICS, MaScQA, SciCode, ProteinLMBench, TRQA, AstroVisBench , CMPhysBench,
+    AIME24, AIME25,
     SGI_Bench_Wet_Experiment,SGI_Bench_Dry_Experiment,SGI_Bench_Deep_Research,SGI_Bench_Idea_Generation
 ]
 
