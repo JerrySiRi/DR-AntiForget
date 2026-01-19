@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
+import os
 from datasets import get_dataset_config_names, load_dataset
 
 from scieval.smp import load
@@ -24,6 +25,7 @@ from .metrics import METRIC_FUNCTIONS, classification_scores, summarise_metric_t
 from .parsing import (
     enumerate_options,
     format_options_block,
+    #* Detects refusal-style responses so they can be scored as unanswered.
     looks_like_refusal,
     normalize_target_scores,
     parse_mcq_prediction,
@@ -31,6 +33,11 @@ from .parsing import (
 )
 
 
+#* ChemBench dataset adapter.
+#* Responsibilities:
+#* - Load ChemBench tasks/questions from HuggingFace or local JSON.
+#* - Build model prompts (MCQ vs numeric; optional chain-of-thought).
+#* - Parse model outputs and compute per-question + aggregated metrics.
 class ChemBench(TextBaseDataset):
     TYPE = "TEXT"
     MODALITY = "TEXT"
@@ -41,9 +48,13 @@ class ChemBench(TextBaseDataset):
         source: str = "huggingface",
         data_dir: Optional[str] = None,
         split: str = DEFAULT_SPLIT,
+        #* Optional subset of topics/configs to load.
         topics: Optional[Sequence[str]] = None,
+        #* If True, shuffle MCQ option ordering deterministically using `random_seed`.
         shuffle_options: bool = False,
+        #* If True, append a Chain-of-Thought instruction to the prompt.
         use_cot: bool = False,
+        #* RNG seed used for deterministic shuffling.
         random_seed: int = 42,
     ) -> None:
         self.dataset_name = dataset
@@ -64,15 +75,20 @@ class ChemBench(TextBaseDataset):
         super().__init__(dataset=dataset)
 
     @classmethod
+    #* Registry hook used by the evaluation framework to list available dataset names.
     def supported_datasets(cls):
         return ["ChemBench"]
 
     # ------------------------------------------------------------------
+    #* Load ChemBench questions into a DataFrame.
+    #* Returns one row per (topic, task, example).
     def load_data(self, dataset: str) -> pd.DataFrame:
         records: List[Dict[str, Any]] = []
         if self.source == "huggingface":
+            #! Load from HF Hub (or local HF snapshot path, see `_load_from_huggingface`).
             records = self._load_from_huggingface()
         elif self.source == "directory":
+            #! Load from a local directory containing task JSON files.
             if not self.data_dir:
                 raise ValueError("data_dir must be provided when source='directory'.")
             records = self._load_from_directory(self.data_dir)
@@ -81,13 +97,17 @@ class ChemBench(TextBaseDataset):
 
         if not records:
             raise ValueError("No ChemBench samples were loaded. Check the source settings.")
+        #* The evaluation framework expects a pandas DataFrame.
         return pd.DataFrame(records)
 
+    #* Called after `load_data` by the base class; builds fast lookup tables.
     def post_build(self, dataset: str) -> None:
+        #* Map question_id -> row dict so evaluation can join predictions to samples quickly.
         self._samples = {}
         for idx in range(len(self.data)):
             row = self.data.iloc[idx].to_dict()
             self._samples[str(row["question_id"])] = row
+        #* Cache the topic list for per-topic metric aggregation.
         self.topics_in_use = sorted(set(self.data["topic"].tolist()))
 
     # ------------------------------------------------------------------
@@ -234,12 +254,26 @@ class ChemBench(TextBaseDataset):
         }
 
     # ------------------------------------------------------------------
+    #! Unified Logic: Prefer Local Reading over HF Reading.
     def _load_from_huggingface(self) -> List[Dict[str, Any]]:
-        selected_topics = self.topics or get_dataset_config_names(HF_DATASET)
         rows: List[Dict[str, Any]] = []
         global_index = 0
+
+        #! local dir layout: ${SCIEVAL_DATA_ROOT}/jablonkagroup__ChemBench
+        data_root = os.environ.get("SCIEVAL_DATA_ROOT", "/data/home/scyb546/datasets") 
+        local_repo_dir = os.path.join(data_root, HF_DATASET.replace("/", "__"))
+
+        #! topic/config 列表必须从“实际数据源”读取：
+        #! - 如果使用本地 snapshot，就从本地路径取 config names
+        # - 否则才从 HF repo_id 取
+        config_source = local_repo_dir if local_repo_dir is not None else HF_DATASET
+        selected_topics = self.topics or get_dataset_config_names(config_source)
+
         for topic in selected_topics:
-            dataset = load_dataset(HF_DATASET, topic, split=self.split)
+            if local_repo_dir is not None:
+                dataset = load_dataset(local_repo_dir, topic, split=self.split)
+            else:
+                dataset = load_dataset(HF_DATASET, topic, split=self.split)
             for task in dataset:
                 rows.extend(self._expand_task(topic, task, global_index))
                 global_index = len(rows)

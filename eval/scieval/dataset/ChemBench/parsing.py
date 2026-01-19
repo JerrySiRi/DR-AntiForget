@@ -1,4 +1,12 @@
 """Parsing helpers shared by the ChemBench VLMEvalKit implementation."""
+
+#! Parsing utilities used during evaluation.
+#! Responsibilities:
+#* - Normalize/format answer options for MCQ questions
+#* - Extract MCQ letters or numeric values from raw model output
+#* - Detect refusal-style responses
+
+
 from __future__ import annotations
 
 import json

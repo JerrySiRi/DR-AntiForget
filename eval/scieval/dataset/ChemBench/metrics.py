@@ -1,4 +1,9 @@
 """Metric helpers mirroring the original ChemBench implementation."""
+#* Metric functions and aggregation utilities used by `ChemBench.evaluate`.
+#* This module provides:
+#* - Per-question metrics (MAE/MSE/string match/multiple-choice grading)
+#* - Classification-style metrics for MCQ (precision/recall/F1/hamming)
+#* - Aggregation helpers to summarise per-question metrics into dataset-level scores
 from __future__ import annotations
 
 import math
@@ -10,6 +15,7 @@ from loguru import logger
 
 
 def _is_number_like(x):
+    #* Helper: returns True if `x` can be safely cast to float.
     """Check if the input is float-like."""
     try:
         float(x)

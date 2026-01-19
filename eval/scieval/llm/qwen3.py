@@ -19,7 +19,7 @@ class Qwen3LLM(BaseModel):
         temperature: float = 0,
         top_p: float = 0.8,
         top_k: int = 20,
-        max_tokens: int = 1024,
+        max_tokens: int = 1024, #* default
         stop: list[str] | None = None,
         trust_remote_code: bool = True,
         dtype: str = "auto",

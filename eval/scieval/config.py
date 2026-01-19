@@ -88,13 +88,13 @@ qwen3llm_series = {
         Qwen3LLM,
         model_path="/data/home/scyb546/models/Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218",
         temperature=0,
-        max_token=1024,
+        max_token=256,
     ),
     "Qwen3-4B-Instruct": partial[Qwen3LLM]( 
         Qwen3LLM,
         model_path="/data/home/scyb546/models/Qwen3-4B_Instruct",
         temperature=0,
-        max_token=1024,
+        max_token=256,
     )
 }
 
