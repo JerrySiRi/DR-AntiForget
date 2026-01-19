@@ -20,13 +20,21 @@ def _default_local_repo_dir(repo_id: str) -> str:
 
 
 def _extract_final_integer(text: str) -> Optional[str]:
-    #* Prefer tagged format first, otherwise take the last integer found.
+    #* Extraction priority:
+    #* 1) Explicit [ANSWER]...[/ANSWER] tag
+    #* 2) Integer immediately following "The Answer is" (with optional colon)
+    #* 3) Fallback: last integer found anywhere in the text
     if not isinstance(text, str):
         return None
 
     tagged = re.search(r"\[ANSWER\]\s*([+-]?[0-9]+)\s*\[/ANSWER\]", text, flags=re.IGNORECASE)
     if tagged:
         return tagged.group(1).strip()
+
+    #* Handle outputs like: "The Answer is: 236" or "The answer is 025".
+    after_phrase = re.search(r"the\s+answer\s+is\s*:?\s*([+-]?[0-9]+)", text, flags=re.IGNORECASE)
+    if after_phrase:
+        return after_phrase.group(1).strip()
 
     hits = re.findall(r"[+-]?[0-9]+", text)
     if hits:
@@ -37,15 +45,30 @@ def _extract_final_integer(text: str) -> Optional[str]:
 
 def _normalize_aime24_answer(ans: Any) -> str:
     #* AIME24 ground truth is a 3-digit string (leading zeros allowed), e.g. "025".
+    #* IMPORTANT: do NOT convert arbitrary-length digit strings to int(); Python 3.11+ limits int(string) digits.
     if ans is None:
         return ""
     s = str(ans).strip()
+
+    #* Keep only the first integer-like span.
     m = re.search(r"[+-]?[0-9]+", s)
     if not m:
         return ""
-    n = int(m.group(0))
-    #* Spec says strictly 3 digits.
-    return f"{n:03d}"[-3:]
+
+    digits = m.group(0)
+    #* Drop sign if present; AIME answers are non-negative.
+    if digits.startswith(('+', '-')):
+        digits = digits[1:]
+
+    if not digits:
+        return ""
+
+    #* If the model spammed an extremely long number, just take the last 3 digits.
+    #* This avoids crashing and matches the benchmark's 3-digit answer format.
+    digits = digits[-3:]
+
+    #* Left-pad with zeros to ensure exactly 3 digits.
+    return digits.zfill(3)
 
 
 def _get_column(ds, required: str, fallbacks: Tuple[str, ...] = ()) -> str:
@@ -56,7 +79,9 @@ def _get_column(ds, required: str, fallbacks: Tuple[str, ...] = ()) -> str:
     for name in fallbacks:
         if name in cols:
             return name
-    raise KeyError(f"Missing required column '{required}' (tried {required!r} + {fallbacks}) in dataset columns: {cols}")
+    raise KeyError(
+        f"Missing required column '{required}' (tried {required!r} + {fallbacks}) in dataset columns: {cols}"
+    )
 
 
 class AIME24(TextBaseDataset):
@@ -88,7 +113,11 @@ class AIME24(TextBaseDataset):
         return ["AIME24"]
 
     def _resolve_dataset_source(self) -> Tuple[str, Dict[str, Any]]:
-        local_path = str(self.local_repo_dir) if self.local_repo_dir is not None else _default_local_repo_dir(self.HF_DATASET)
+        local_path = (
+            str(self.local_repo_dir)
+            if self.local_repo_dir is not None
+            else _default_local_repo_dir(self.HF_DATASET)
+        )
         if self.prefer_local and osp.exists(local_path):
             return local_path, {}
         return self.HF_DATASET, {}
@@ -130,7 +159,6 @@ class AIME24(TextBaseDataset):
 
         problem = str(line.get("problem", "")).strip()
 
-        #* 1-shot: take the first example from the dataset split.
         shot = self._shot_example
         shot_block = ""
         if shot and shot.get("problem"):
@@ -140,8 +168,6 @@ class AIME24(TextBaseDataset):
                 f"The Answer is: [ANSWER]{shot['answer']}[/ANSWER]\n\n"
             )
 
-        #* AIME-style instruction: allow free-form reasoning, but enforce exactly one final answer line.
-        #* Important: discourage repeating the special token by explicitly requiring a single occurrence.
         prompt = (
             "You are a helpful assistant solving AIME-style math problems.\n"
             "Think step by step.\n"

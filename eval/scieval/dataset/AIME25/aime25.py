@@ -20,13 +20,21 @@ def _default_local_repo_dir(repo_id: str) -> str:
 
 
 def _extract_final_integer(text: str) -> Optional[str]:
-    #* Prefer tagged format first, otherwise take the last integer found.
+    #* Extraction priority:
+    #* 1) Explicit [ANSWER]...[/ANSWER] tag
+    #* 2) Integer immediately following "The Answer is" (with optional colon)
+    #* 3) Fallback: last integer found anywhere in the text
     if not isinstance(text, str):
         return None
 
     tagged = re.search(r"\[ANSWER\]\s*([+-]?[0-9]+)\s*\[/ANSWER\]", text, flags=re.IGNORECASE)
     if tagged:
         return tagged.group(1).strip()
+
+    #* Handle outputs like: "The Answer is: 236" or "The answer is 025".
+    after_phrase = re.search(r"the\s+answer\s+is\s*:?\s*([+-]?[0-9]+)", text, flags=re.IGNORECASE)
+    if after_phrase:
+        return after_phrase.group(1).strip()
 
     hits = re.findall(r"[+-]?[0-9]+", text)
     if hits:
@@ -71,7 +79,7 @@ class AIME25(TextBaseDataset):
     def __init__(
         self,
         dataset: str = "AIME25",
-        split: str = "train",
+        split: str = "test",
         prefer_local: bool = True,
         local_repo_dir: Optional[str] = None,
     ) -> None:

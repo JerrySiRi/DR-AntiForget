@@ -372,22 +372,23 @@ def main():
         date, commit_id = timestr('day'), githash(digits=8)
         eval_id = f"T{date}_G{commit_id}"
 
-        pred_root = osp.join(args.work_dir, model_name, eval_id)
-        pred_root_meta = osp.join(args.work_dir, model_name)
-        os.makedirs(pred_root_meta, exist_ok=True)
-
-        prev_pred_roots = ls(osp.join(args.work_dir, model_name), mode='dir')
-        if len(prev_pred_roots) and args.reuse:
-            prev_pred_roots.sort()
-
-        if not osp.exists(pred_root):
-            os.makedirs(pred_root, exist_ok=True)
-
         if use_config:
             model = build_model_from_config(cfg['model'], model_name, args.use_vllm, args=args)
-
-        
         for _, dataset_name in enumerate(args.data):
+            #* Output layout:
+            #* - pred_root (for this run): <work_dir>/<model>/<dataset>/<eval_id>/
+            #* - pred_root_meta (for reuse/symlinks): <work_dir>/<model>/<dataset>/
+            pred_root = osp.join(args.work_dir, dataset_name, model_name, eval_id)
+            pred_root_meta = osp.join(args.work_dir, dataset_name, model_name)
+            os.makedirs(pred_root, exist_ok=True)
+
+            prev_pred_roots = ls(pred_root_meta, mode='dir')
+            #* `prepare_reuse_files` expects a <model>-level meta root. We pass <work_dir>/<model>
+            #* so it can find and copy previous prediction files across eval_ids.
+            pred_root_meta_model = osp.join(args.work_dir, model_name)
+            if len(prev_pred_roots) and args.reuse:
+                prev_pred_roots.sort()
+
             if WORLD_SIZE > 1:
                 dist.barrier()
 
