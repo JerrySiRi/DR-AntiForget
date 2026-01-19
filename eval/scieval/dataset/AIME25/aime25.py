@@ -66,7 +66,6 @@ def _get_column(ds, required: str, fallbacks: Tuple[str, ...] = ()) -> str:
 class AIME25(TextBaseDataset):
     TYPE = "TEXT"
     MODALITY = "TEXT"
-
     HF_DATASET = "math-ai/aime25"
 
     def __init__(
@@ -141,17 +140,21 @@ class AIME25(TextBaseDataset):
             shot_block = (
                 "Here is an example:\n"
                 f"Problem: {shot['problem']}\n"
-                f"Answer: [ANSWER]{shot['answer']}[/ANSWER]\n\n"
+                f"The Answer is: [ANSWER]{shot['answer']}[/ANSWER]\n\n"
             )
 
         #* AIME-style instruction: step-by-step reasoning, but constrained final output.
         prompt = (
             "You are a helpful assistant solving AIME-style math problems.\n"
-            "Think step by step, but return only the final answer in the required format.\n"
-            "The final answer must be an integer with at most 3 digits.\n\n"
+            "Think step by step.\n"
+            "The final answer must be an integer with fewer than 3 digits.\n\n"
             f"{shot_block}"
             f"Problem: {problem}\n\n"
-            "Return ONLY the final answer as [ANSWER]N[/ANSWER].\n"
+            "Solution:\n"
+            "(You may write your reasoning here.)\n\n"
+            "Your final output MUST end with EXACTLY ONE answer line, and you MUST NOT repeat it:\n"
+            "The Answer is: [ANSWER]DDD[/ANSWER]\n"
+            "Do NOT write anything after the answer line.\n"
         )
 
         return [dict(type="text", value=prompt)]
