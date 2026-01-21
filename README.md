@@ -25,4 +25,4 @@
 
 多次分发后真正运行的代码在./sft/LlamaFactory/src/llamafactory/train，里边可以做train & evaluation & predict，说不定可以和Scieval和在一起？
 
-
+DeepSpeed 在初始化时要检查/编译 CUDA Op（含nvcc），在运行前需要保证安装CUDA Toolkit, 环境变量CUDA_HOME被设置等等（CityUHK服务器需要做module load cuda/12.4）

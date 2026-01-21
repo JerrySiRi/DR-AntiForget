@@ -1,6 +1,19 @@
 ### model
-model_name_or_path: Qwen/Qwen3-4B-Instruct-2507
+model_name_or_path: /data/home/scyb546/models/Qwen3-4B_Instruct
 trust_remote_code: true
+
+### monitor
+report_to: swanlab  # choices: [none, wandb, tensorboard, swanlab, mlflow]
+use_swanlab: true
+swanlab_project: sft_multi_lora
+swanlab_run_name: test_run
+swanlab_api_key: ObtzlrtdeQM6dpWLnE72E
+swanlab_mode: local
+# CityUHK H800 server do not connect to the Internet
+
+#report_to: wandb
+#run_name: test_run
+
 
 ### method
 stage: sft
@@ -25,7 +38,6 @@ save_steps: 500
 plot_loss: true
 overwrite_output_dir: true
 save_only_model: false
-report_to: none  # choices: [none, wandb, tensorboard, swanlab, mlflow]
 
 ### train
 per_device_train_batch_size: 1
