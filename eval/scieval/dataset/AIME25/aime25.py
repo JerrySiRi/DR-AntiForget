@@ -26,11 +26,11 @@ def _extract_answer(text: str) -> Optional[str]:
     # Prefer evalscope's official math extractor (handles \\boxed{...} etc.)
     try:
         from evalscope.metrics.math_parser import extract_answer
-
+        from .math_normalize import normalize_answer
         extracted = extract_answer(text)
-        if extracted is None:
-            return None
-        return str(extracted)
+        filtered_pred = normalize_answer(extracted)
+        return filtered_pred
+        
     except Exception:
         pass
 
@@ -40,7 +40,6 @@ def _extract_answer(text: str) -> Optional[str]:
         return hits[-1]
 
     return None
-
 
 def _normalize_aime25_answer(ans: Any) -> str:
     #* AIME25 ground truth is a 1-3 digit integer string.
@@ -56,7 +55,8 @@ def _normalize_aime25_answer(ans: Any) -> str:
     if m_fallback:
         return m_fallback.group(0)
 
-    return ""
+    return 
+
 
 
 def _get_column(ds, required: str, fallbacks: Tuple[str, ...] = ()) -> str:
@@ -112,7 +112,7 @@ class AIME25(TextBaseDataset):
         for row in ds:
             qid = str(row.get(id_col, "")).strip()
             problem = str(row.get(problem_col, "")).strip()
-            answer = _normalize_aime25_answer(row.get(answer_col))
+            answer = _normalize_aime25_answer(row.get(answer_col)) #* normalize ground truth answer
             records.append({"index": qid, "id": qid, "problem": problem, "answer": answer})
 
         return pd.DataFrame(records)
@@ -137,6 +137,8 @@ class AIME25(TextBaseDataset):
         return [dict(type="text", value=prompt)]
 
     def evaluate(self, eval_file: str, **judge_kwargs) -> Dict[str, Any]:
+        from evalscope.metrics.math_parser import extract_answer
+        from .grader import grade_answer
         data = load(eval_file)
         if isinstance(data, dict):
             data = pd.DataFrame(data)
@@ -164,12 +166,10 @@ class AIME25(TextBaseDataset):
 
             gt = str(sample.get("answer", "")).strip()
             pred_raw = str(row["prediction"])
-            pred_extracted = _extract_answer(pred_raw)
-            pred_normalized = _normalize_aime25_answer(pred_extracted)
+            pred_extracted = _extract_answer(pred_raw)            
+            hit = grade_answer(extract_answer(pred_extracted), gt)
 
-            hit = int(pred_normalized == gt)
-
-            per_row.append({"id": qid, "prediction": pred_normalized, "answer": gt, "hit": hit})
+            per_row.append({"id": qid, "prediction": pred_extracted, "answer": gt, "hit": hit})
             hits.append(hit)
 
         acc = sum(hits) / len(hits) if hits else 0.0

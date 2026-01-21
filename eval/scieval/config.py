@@ -1781,7 +1781,8 @@ qwen3llm_series = {
         temperature=0.7,
         max_tokens=2**14,
         top_k=20,
-        top_p=0.8
+        top_p=0.8,
+        presence_penalty=1.5
     ),
     "DR-Tulu-8B": partial[Qwen3LLM]( 
         Qwen3LLM,
@@ -1789,7 +1790,8 @@ qwen3llm_series = {
         temperature=0.7,
         max_tokens=2**14,
         top_k=20,
-        top_p=0.8
+        top_p=0.8,
+        presence_penalty=1.5
     ),
     "Qwen3-4B-Instruct": partial[Qwen3LLM]( 
         Qwen3LLM,
@@ -1797,7 +1799,8 @@ qwen3llm_series = {
         temperature=0.7,
         max_tokens=2**14,
         top_k=20,
-        top_p=0.8
+        top_p=0.8,
+        presence_penalty=1.5
     )
 }
 

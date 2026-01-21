@@ -27,6 +27,7 @@ export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 
+rm -rf ../outputs/local/AIME24/DR-Tulu-8B
 uv run python ../run.py \
   --data AIME24 \
   --model DR-Tulu-8B \

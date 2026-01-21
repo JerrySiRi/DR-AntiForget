@@ -27,6 +27,7 @@ export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 
+rm -rf ../outputs/local/AIME25/Qwen3-4B-Instruct
 uv run python ../run.py \
   --data AIME25 \
   --model Qwen3-4B-Instruct \
