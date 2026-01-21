@@ -1773,24 +1773,31 @@ for grp in model_groups:
 
 
 #! Add Language Model Configuration
+#* Current Config for AIME 24/25
 qwen3llm_series = {
     "Qwen3-8B": partial[Qwen3LLM](
         Qwen3LLM,
         model_path="/data/home/scyb546/models/Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218",
-        temperature=0,
+        temperature=0.7,
         max_tokens=2**14,
+        top_k=20,
+        top_p=0.8
     ),
     "DR-Tulu-8B": partial[Qwen3LLM]( 
         Qwen3LLM,
         model_path="/data/home/scyb546/models/DR-Tulu-8B/snapshots/ab49434b30c448760f7ea9dd16aa4dbef38b97d7",
-        temperature=0,
+        temperature=0.7,
         max_tokens=2**14,
+        top_k=20,
+        top_p=0.8
     ),
     "Qwen3-4B-Instruct": partial[Qwen3LLM]( 
         Qwen3LLM,
         model_path="/data/home/scyb546/models/Qwen3-4B_Instruct",
-        temperature=0,
+        temperature=0.7,
         max_tokens=2**14,
+        top_k=20,
+        top_p=0.8
     )
 }
 

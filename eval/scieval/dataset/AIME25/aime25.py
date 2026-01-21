@@ -19,23 +19,22 @@ def _default_local_repo_dir(repo_id: str) -> str:
     return osp.join(data_root, repo_id.replace("/", "__"))
 
 
-def _extract_final_integer(text: str) -> Optional[str]:
-    #* Extraction priority:
-    #* 1) Explicit [ANSWER]...[/ANSWER] tag
-    #* 2) Integer immediately following "The Answer is" (with optional colon)
-    #* 3) Fallback: last integer found anywhere in the text
+def _extract_answer(text: str) -> Optional[str]:
     if not isinstance(text, str):
         return None
 
-    tagged = re.search(r"\[ANSWER\]\s*([+-]?[0-9]+)\s*\[/ANSWER\]", text, flags=re.IGNORECASE)
-    if tagged:
-        return tagged.group(1).strip()
+    # Prefer evalscope's official math extractor (handles \\boxed{...} etc.)
+    try:
+        from evalscope.metrics.math_parser import extract_answer
 
-    #* Handle outputs like: "The Answer is: 236" or "The answer is 025".
-    after_phrase = re.search(r"the\s+answer\s+is\s*:?\s*([+-]?[0-9]+)", text, flags=re.IGNORECASE)
-    if after_phrase:
-        return after_phrase.group(1).strip()
+        extracted = extract_answer(text)
+        if extracted is None:
+            return None
+        return str(extracted)
+    except Exception:
+        pass
 
+    # Fallback: last integer found anywhere in the text
     hits = re.findall(r"[+-]?[0-9]+", text)
     if hits:
         return hits[-1]
@@ -87,9 +86,6 @@ class AIME25(TextBaseDataset):
         self.prefer_local = prefer_local
         self.local_repo_dir = Path(local_repo_dir).expanduser() if local_repo_dir else None
 
-        #* Cache dataset-level 1-shot example (the first record in the split).
-        self._shot_example: Optional[Dict[str, str]] = None
-
         #* Map id -> sample row for evaluation lookup.
         self._samples: Dict[str, Dict[str, Any]] = {}
         super().__init__(dataset=dataset)
@@ -125,15 +121,6 @@ class AIME25(TextBaseDataset):
         #* Build id->row mapping for evaluation.
         self._samples = {str(row["id"]): row for row in self.data.to_dict(orient="records")}
 
-        #* Cache 1-shot example from the first row of the split.
-        if len(self.data):
-            first = self.data.iloc[0].to_dict()
-            self._shot_example = {
-                "problem": str(first.get("problem", "")).strip(),
-                "answer": str(first.get("answer", "")).strip(),
-            }
-        else:
-            self._shot_example = None
 
     def build_prompt(self, line) -> List[Dict[str, str]]:
         if isinstance(line, int):
@@ -141,28 +128,10 @@ class AIME25(TextBaseDataset):
 
         problem = str(line.get("problem", "")).strip()
 
-        #* 1-shot: take the first example from the dataset split.
-        shot = self._shot_example
-        shot_block = ""
-        if shot and shot.get("problem"):
-            shot_block = (
-                "Here is an example:\n"
-                f"Problem: {shot['problem']}\n"
-                f"The Answer is: [ANSWER]{shot['answer']}[/ANSWER]\n\n"
-            )
-
-        #* AIME-style instruction: step-by-step reasoning, but constrained final output.
         prompt = (
-            "You are a helpful assistant solving AIME-style math problems.\n"
-            "Think step by step.\n"
-            "The final answer must be an integer with fewer than 3 digits.\n\n"
-            f"{shot_block}"
-            f"Problem: {problem}\n\n"
-            "Solution:\n"
-            "(You may write your reasoning here.)\n\n"
-            "Your final output MUST end with EXACTLY ONE answer line, and you MUST NOT repeat it:\n"
-            "The Answer is: [ANSWER]DDD[/ANSWER]\n"
-            "Do NOT write anything after the answer line.\n"
+            "Solve the following math problem step by step. Put your answer inside \\boxed{}.\n\n"
+            f"{problem}\n\n"
+            "Remember to put your answer inside \\boxed{}."
         )
 
         return [dict(type="text", value=prompt)]
@@ -195,9 +164,8 @@ class AIME25(TextBaseDataset):
 
             gt = str(sample.get("answer", "")).strip()
             pred_raw = str(row["prediction"])
-            pred = _extract_final_integer(pred_raw)
-            #* Normalize prediction to be comparable with normalized ground truth.
-            pred_normalized = _normalize_aime25_answer(pred)
+            pred_extracted = _extract_answer(pred_raw)
+            pred_normalized = _normalize_aime25_answer(pred_extracted)
 
             hit = int(pred_normalized == gt)
 

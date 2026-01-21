@@ -33,4 +33,4 @@ uv run python ../run.py \
   --mode all \
   --use-vllm \
   --work-dir ../outputs/local \
-  --verbose
+  --verbose 
