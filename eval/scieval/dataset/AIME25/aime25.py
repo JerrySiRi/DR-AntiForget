@@ -25,7 +25,7 @@ def _extract_answer(text: str) -> Optional[str]:
 
     # Prefer evalscope's official math extractor (handles \\boxed{...} etc.)
     try:
-        from evalscope.metrics.math_parser import extract_answer
+        from .math_parser import extract_answer
         from .math_normalize import normalize_answer
         extracted = extract_answer(text)
         filtered_pred = normalize_answer(extracted)
@@ -137,7 +137,7 @@ class AIME25(TextBaseDataset):
         return [dict(type="text", value=prompt)]
 
     def evaluate(self, eval_file: str, **judge_kwargs) -> Dict[str, Any]:
-        from evalscope.metrics.math_parser import extract_answer
+        from .math_parser import extract_answer
         from .grader import grade_answer
         data = load(eval_file)
         if isinstance(data, dict):

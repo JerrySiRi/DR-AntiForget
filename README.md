@@ -17,6 +17,7 @@
 
 注意： 
 - 每个benchmark的超参数配置是不一样的，需要重新配置config.py文件中的模型超参数（按evalscope，或其他公认的评测脚本来）
+- 需要把evalscope的脚本直接放过来，不能直接调evalscope的代码，会有严重的依赖冲突
 
 
 

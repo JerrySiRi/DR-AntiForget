@@ -55,6 +55,7 @@ dependencies = [
     "typing-extensions>=4.15.0",
     "validators>=0.35.0",
     "vllm==0.12.0",
+    "word2number>=1.1",
     "wrapt-timeout-decorator>=1.5.1",
     "xlsxwriter>=3.2.9",
 ]
