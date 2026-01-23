@@ -4,7 +4,7 @@ set -x
 #SBATCH --gpus=4
 #SBATCH -p gpu
 
-# e.g. sbatch -p gpu --gpus=4 ./MMLU_DR-Tulu-8B-8001.sh
+# e.g. sbatch -p gpu --gpus=4 ./IFEval_Qwen3-4B-Instruct-10001.sh
 
 # --- Local-first dataset snapshot setup ---
 export DATA_ROOT=/data/home/scyb546/datasets
@@ -22,8 +22,8 @@ else
 fi
 
 # --- Offline mode env vars (force local read) ---
-export MODEL_PATH=/data/home/scyb546/models/DR-Tulu-8B/snapshots/ab49434b30c448760f7ea9dd16aa4dbef38b97d7
-export SERVED_MODEL_NAME=dr-tulu-8b
+export MODEL_PATH=/data/home/scyb546/models/Qwen3-4B-Instruct
+export SERVED_MODEL_NAME=qwen3-4b-instruct
 export PYTHONPATH=/data/home/scyb546/multi-lora/eval:${PYTHONPATH:-}
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -32,7 +32,7 @@ export HF_HUB_OFFLINE=1
 
 # -- vLLM server -- #
 #! &是把vllm server放在后台运行
-VLLM_PORT=8001
+VLLM_PORT=10001
 
 uv run python -m vllm.entrypoints.openai.api_server \
     --model ${MODEL_PATH} \
@@ -83,7 +83,7 @@ uv run evalscope eval \
  --model ${SERVED_MODEL_NAME} \
  --api-url http://127.0.0.1:${VLLM_PORT}/v1 \
  --eval-type openai_api \
- --repeats 16 \
+ --repeats 4 \
  --datasets ifeval \
  --dataset-hub local \
  --dataset-dir ${IFEval_LOCAL_DIR} \

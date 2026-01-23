@@ -4,26 +4,26 @@ set -x
 #SBATCH --gpus=4
 #SBATCH -p gpu
 
-# e.g. sbatch -p gpu --gpus=4 ./MMLU_DR-Tulu-8B-8001.sh
+# e.g. sbatch -p gpu --gpus=4 ./IFEval_Qwen3-30B-A3B-10002.sh
 
 # --- Local-first dataset snapshot setup ---
 export DATA_ROOT=/data/home/scyb546/datasets
-MMLU_REPO_ID="cais/mmlu"
-MMLU_LOCAL_DIR="${DATA_ROOT}/$(echo "${MMLU_REPO_ID}" | sed 's#/#__#g')"
+IFEval_REPO_ID="google/IFEval"
+IFEval_LOCAL_DIR="${DATA_ROOT}/$(echo "${IFEval_REPO_ID}" | sed 's#/#__#g')"
 
 
 # Download only if local snapshot dir does not exist or is empty.
-if [ ! -d "${MMLU_LOCAL_DIR}" ] || [ -z "$(ls -A "${MMLU_LOCAL_DIR}" 2>/dev/null)" ]; then
+if [ ! -d "${IFEval_LOCAL_DIR}" ] || [ -z "$(ls -A "${IFEval_LOCAL_DIR}" 2>/dev/null)" ]; then
   uv run python ../../offline_download.py \
-    --repo_id "${MMLU_REPO_ID}" \
+    --repo_id "${IFEval_REPO_ID}" \
     --root "${DATA_ROOT}"
 else
-  echo "[MMLU] Found local dataset snapshot: ${MMLU_LOCAL_DIR}"
+  echo "[IFEval] Found local dataset snapshot: ${IFEval_LOCAL_DIR}"
 fi
 
 # --- Offline mode env vars (force local read) ---
-export MODEL_PATH=/data/home/scyb546/models/DR-Tulu-8B/snapshots/ab49434b30c448760f7ea9dd16aa4dbef38b97d7
-export SERVED_MODEL_NAME=dr-tulu-8b
+export MODEL_PATH=/data/home/scyb546/models/Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+export SERVED_MODEL_NAME=qwen3-30b-a3b
 export PYTHONPATH=/data/home/scyb546/multi-lora/eval:${PYTHONPATH:-}
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -32,7 +32,7 @@ export HF_HUB_OFFLINE=1
 
 # -- vLLM server -- #
 #! &是把vllm server放在后台运行
-VLLM_PORT=8001
+VLLM_PORT=10002
 
 uv run python -m vllm.entrypoints.openai.api_server \
     --model ${MODEL_PATH} \
@@ -83,11 +83,11 @@ uv run evalscope eval \
  --model ${SERVED_MODEL_NAME} \
  --api-url http://127.0.0.1:${VLLM_PORT}/v1 \
  --eval-type openai_api \
- --repeats 16 \
- --datasets mmlu \
+ --repeats 4 \
+ --datasets ifeval \
  --dataset-hub local \
- --dataset-dir ${MMLU_LOCAL_DIR} \
- --dataset-args '{"mmlu": {"aggregation": "mean", "few_shot_num": 5, "filters": {"remove_until": "</think>"}, "local_path": "'${MMLU_LOCAL_DIR}'"}}' \
+ --dataset-dir ${IFEval_LOCAL_DIR} \
+ --dataset-args '{"ifeval": {"aggregation": "mean", "few_shot_num": 0, "filters": {"remove_until": "</think>"}, "local_path": "'${IFEval_LOCAL_DIR}'"}}' \
  --generation-config '{"max_tokens": 38912, "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "extra_body": {"chat_template_kwargs": {"enable_thinking": false}}}' \
  --timeout 60000 \
  --stream \
