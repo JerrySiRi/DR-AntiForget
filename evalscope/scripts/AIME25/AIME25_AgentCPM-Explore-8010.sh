@@ -4,26 +4,26 @@ set -x
 #SBATCH --gpus=4
 #SBATCH -p gpu
 
-# e.g. sbatch -p gpu --gpus=4 ./AIME24_DR-Tulu-8B-8001.sh
+# e.g. sbatch -p gpu --gpus=4 ./AIME25_AgentCPM-Explore-8010.sh
 
 # --- Local-first dataset snapshot setup ---
 export DATA_ROOT=/data/home/scyb546/datasets
-AIME24_REPO_ID="HuggingFaceH4/aime_2024"
-AIME24_LOCAL_DIR="${DATA_ROOT}/$(echo "${AIME24_REPO_ID}" | sed 's#/#__#g')"
+AIME25_REPO_ID="opencompass/AIME2025"
+AIME25_LOCAL_DIR="${DATA_ROOT}/$(echo "${AIME25_REPO_ID}" | sed 's#/#__#g')"
 
 
 # Download only if local snapshot dir does not exist or is empty.
-if [ ! -d "${AIME24_LOCAL_DIR}" ] || [ -z "$(ls -A "${AIME24_LOCAL_DIR}" 2>/dev/null)" ]; then
+if [ ! -d "${AIME25_LOCAL_DIR}" ] || [ -z "$(ls -A "${AIME25_LOCAL_DIR}" 2>/dev/null)" ]; then
   uv run python ../../offline_download.py \
-    --repo_id "${AIME24_REPO_ID}" \
+    --repo_id "${AIME25_REPO_ID}" \
     --root "${DATA_ROOT}"
 else
-  echo "[AIME24] Found local dataset snapshot: ${AIME24_LOCAL_DIR}"
+  echo "[AIME25] Found local dataset snapshot: ${AIME25_LOCAL_DIR}"
 fi
 
 # --- Offline mode env vars (force local read) ---
-export MODEL_PATH=/data/home/scyb546/models/DR-Tulu-8B/snapshots/ab49434b30c448760f7ea9dd16aa4dbef38b97d7
-export SERVED_MODEL_NAME=dr-tulu-8b
+export MODEL_PATH=/data/home/scyb546/models/AgentCPM-Explore
+export SERVED_MODEL_NAME=agentcpm-explore
 export PYTHONPATH=/data/home/scyb546/multi-lora/eval:${PYTHONPATH:-}
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -32,7 +32,7 @@ export HF_HUB_OFFLINE=1
 
 # -- vLLM server -- #
 #! &是把vllm server放在后台运行
-VLLM_PORT=8001
+VLLM_PORT=8010
 
 uv run python -m vllm.entrypoints.openai.api_server \
     --model ${MODEL_PATH} \
@@ -84,10 +84,10 @@ uv run evalscope eval \
  --api-url http://127.0.0.1:${VLLM_PORT}/v1 \
  --eval-type openai_api \
  --repeats 4 \
- --datasets aime24 \
+ --datasets aime25 \
  --dataset-hub local \
- --dataset-dir ${AIME24_LOCAL_DIR} \
- --dataset-args '{"aime24": {"aggregation": "mean_and_pass_at_k", "few_shot_num": 0, "local_path": "'${AIME24_LOCAL_DIR}'"}}' \
+ --dataset-dir ${AIME25_LOCAL_DIR} \
+ --dataset-args '{"aime25": {"aggregation": "mean_and_pass_at_k", "few_shot_num": 0, "local_path": "'${AIME25_LOCAL_DIR}'"}}' \
  --generation-config '{"max_tokens": 38912, "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "extra_body": {"chat_template_kwargs": {"enable_thinking": false}}}' \
  --timeout 60000 \
  --stream \

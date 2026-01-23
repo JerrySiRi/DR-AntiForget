@@ -83,7 +83,7 @@ uv run evalscope eval \
  --model ${SERVED_MODEL_NAME} \
  --api-url http://127.0.0.1:${VLLM_PORT}/v1 \
  --eval-type openai_api \
- --repeats 16 \
+ --repeats 4 \
  --datasets aime25 \
  --dataset-hub local \
  --dataset-dir ${AIME25_LOCAL_DIR} \

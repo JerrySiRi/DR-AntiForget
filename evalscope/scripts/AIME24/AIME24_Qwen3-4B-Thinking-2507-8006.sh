@@ -4,7 +4,7 @@ set -x
 #SBATCH --gpus=4
 #SBATCH -p gpu
 
-# e.g. sbatch -p gpu --gpus=4 ./AIME24_DR-Tulu-8B-8001.sh
+# e.g. sbatch -p gpu --gpus=4 ./AIME24_Qwen3-4B-Thinking-2507-8006.sh
 
 # --- Local-first dataset snapshot setup ---
 export DATA_ROOT=/data/home/scyb546/datasets
@@ -22,8 +22,8 @@ else
 fi
 
 # --- Offline mode env vars (force local read) ---
-export MODEL_PATH=/data/home/scyb546/models/DR-Tulu-8B/snapshots/ab49434b30c448760f7ea9dd16aa4dbef38b97d7
-export SERVED_MODEL_NAME=dr-tulu-8b
+export MODEL_PATH=/data/home/scyb546/models/Qwen3-4B-Thinking-2507/snapshots/768f209d9ea81521153ed38c47d515654e938aea
+export SERVED_MODEL_NAME=qwen3-4b-thinking-2507
 export PYTHONPATH=/data/home/scyb546/multi-lora/eval:${PYTHONPATH:-}
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -32,7 +32,7 @@ export HF_HUB_OFFLINE=1
 
 # -- vLLM server -- #
 #! &是把vllm server放在后台运行
-VLLM_PORT=8001
+VLLM_PORT=8006
 
 uv run python -m vllm.entrypoints.openai.api_server \
     --model ${MODEL_PATH} \
