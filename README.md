@@ -5,6 +5,8 @@
 
 # 1. Eval
 
+## 1.1 scievalkit
+
 运行时请在config.py中执行本地的model_path/huggingface中的模型名称 （模型起vllm的时候没有制定具体的模型名称）
 
 如果服务器无法连接外网，请首先运行scieval/offline_download.py文件，并在其中指定数据集的名称; 在对应benchmark的 _load_from_huggingface中支持本地读取
@@ -19,6 +21,9 @@
 - 每个benchmark的超参数配置是不一样的，需要重新配置config.py文件中的模型超参数（按evalscope，或其他公认的评测脚本来）
 - 需要把evalscope的脚本直接放过来，不能直接调evalscope的代码，会有严重的依赖冲突
 
+## 1.2 Evalscope
+
+请详见google docs中注意事项
 
 
 # 2. SFT
