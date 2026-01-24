@@ -4,26 +4,26 @@ set -x
 #SBATCH --gpus=4
 #SBATCH -p gpu
 
-# e.g. sbatch -p gpu --gpus=4 ./MMLU_Qwen3-4B-Instruct-11001.sh
+# e.g. sbatch -p gpu --gpus=4 ./MedMCQA_Tongyi-DeepResearch-30B-A3B-13002.sh
 
 # --- Local-first dataset snapshot setup ---
 export DATA_ROOT=/data/home/scyb546/datasets
-MMLU_REPO_ID="cais/mmlu"
-MMLU_LOCAL_DIR="${DATA_ROOT}/$(echo "${MMLU_REPO_ID}" | sed 's#/#__#g')"
+MEDMCQA_REPO_ID="openlifescienceai/medmcqa"
+MEDMCQA_LOCAL_DIR="${DATA_ROOT}/$(echo "${MEDMCQA_REPO_ID}" | sed 's#/#__#g')"
 
 
 # Download only if local snapshot dir does not exist or is empty.
-if [ ! -d "${MMLU_LOCAL_DIR}" ] || [ -z "$(ls -A "${MMLU_LOCAL_DIR}" 2>/dev/null)" ]; then
+if [ ! -d "${MEDMCQA_LOCAL_DIR}" ] || [ -z "$(ls -A "${MEDMCQA_LOCAL_DIR}" 2>/dev/null)" ]; then
   uv run python ../../offline_download.py \
-    --repo_id "${MMLU_REPO_ID}" \
+    --repo_id "${MEDMCQA_REPO_ID}" \
     --root "${DATA_ROOT}"
 else
-  echo "[MMLU] Found local dataset snapshot: ${MMLU_LOCAL_DIR}"
+  echo "[MEDMCQA] Found local dataset snapshot: ${MEDMCQA_LOCAL_DIR}"
 fi
 
 # --- Offline mode env vars (force local read) ---
-export MODEL_PATH=/data/home/scyb546/models/Qwen3-4B-Instruct
-export SERVED_MODEL_NAME=qwen3-4b-instruct
+export MODEL_PATH=/data/home/scyb546/models/Tongyi-DeepResearch-30B-A3B
+export SERVED_MODEL_NAME=tongyi-deepresearch-30b-a3b
 export PYTHONPATH=/data/home/scyb546/multi-lora/eval:${PYTHONPATH:-}
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -32,7 +32,7 @@ export HF_HUB_OFFLINE=1
 
 # -- vLLM server -- #
 #! &是把vllm server放在后台运行
-VLLM_PORT=11001
+VLLM_PORT=13002
 
 uv run python -m vllm.entrypoints.openai.api_server \
     --model ${MODEL_PATH} \
@@ -84,10 +84,10 @@ uv run evalscope eval \
  --api-url http://127.0.0.1:${VLLM_PORT}/v1 \
  --eval-type openai_api \
  --repeats 1 \
- --datasets mmlu \
+ --datasets medmcqa \
  --dataset-hub local \
- --dataset-dir ${MMLU_LOCAL_DIR} \
- --dataset-args '{"mmlu": {"aggregation": "mean", "few_shot_num": 5, "filters": {"remove_until": "</think>"}, "local_path": "'${MMLU_LOCAL_DIR}'"}}' \
+ --dataset-dir ${MEDMCQA_LOCAL_DIR} \
+ --dataset-args '{"medmcqa": {"aggregation": "mean", "few_shot_num": 0, "filters": {"remove_until": "</think>"}, "local_path": "'${MEDMCQA_LOCAL_DIR}'"}}' \
  --generation-config '{"max_tokens": 32768, "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "extra_body": {"chat_template_kwargs": {"enable_thinking": false}}}' \
  --timeout 60000 \
  --stream \

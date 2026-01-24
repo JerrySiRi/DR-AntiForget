@@ -41,9 +41,9 @@ uv run python -m vllm.entrypoints.openai.api_server \
     --dtype bfloat16 \
     --gpu-memory-utilization 0.97 \
     --trust-remote-code \
-    --max-model-len 50000 \
+    --max-model-len 40960 \
     --port ${VLLM_PORT} \
-    --max-num-seqs 200 \
+    --max-num-seqs 128 \
     --enable-chunked-prefill \
     --enable-prefix-caching &
 VLLM_PID=$!
@@ -88,6 +88,6 @@ uv run evalscope eval \
  --dataset-hub local \
  --dataset-dir ${MMLU_LOCAL_DIR} \
  --dataset-args '{"mmlu": {"aggregation": "mean", "few_shot_num": 5, "filters": {"remove_until": "</think>"}, "local_path": "'${MMLU_LOCAL_DIR}'"}}' \
- --generation-config '{"max_tokens": 38912, "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "extra_body": {"chat_template_kwargs": {"enable_thinking": false}}}' \
+ --generation-config '{"max_tokens": 32768, "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "extra_body": {"chat_template_kwargs": {"enable_thinking": false}}}' \
  --timeout 60000 \
  --stream \
