@@ -41,7 +41,7 @@ uv run python -m vllm.entrypoints.openai.api_server \
     --dtype bfloat16 \
     --gpu-memory-utilization 0.97 \
     --trust-remote-code \
-    --max-model-len 40960 \
+    --max-model-len 50000 \
     --port ${VLLM_PORT} \
     --max-num-seqs 200 \
     --enable-chunked-prefill \
@@ -83,7 +83,7 @@ uv run evalscope eval \
  --model ${SERVED_MODEL_NAME} \
  --api-url http://127.0.0.1:${VLLM_PORT}/v1 \
  --eval-type openai_api \
- --repeats 4 \
+ --repeats 1 \
  --datasets mmlu \
  --dataset-hub local \
  --dataset-dir ${MMLU_LOCAL_DIR} \
